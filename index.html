@@ -8,76 +8,90 @@
   body {
     font-family: "Segoe UI", sans-serif;
     background: #f7f7f7;
-    margin: 30px;
-    overflow-x: hidden;
+    margin: 20px;
+    font-size: 16px;
   }
-  h1 { color: #333; }
-  label { margin-right: 10px; }
-  input[type=number] {
-    width: 100px;
+  h1 {
+    color: #333;
+    font-size: 20px;
+  }
+  label {
     margin-right: 10px;
-    padding: 4px;
+    font-size: 14px;
+  }
+  input[type=number] {
+    width: 80px;
+    margin-right: 10px;
+    padding: 3px;
+    font-size: 14px;
   }
   button {
-    padding: 6px 12px;
+    padding: 4px 10px;
     border: none;
     background: #4CAF50;
     color: white;
-    border-radius: 5px;
+    border-radius: 4px;
     cursor: pointer;
+    font-size: 14px;
   }
   button:hover { background: #45a049; }
   .question {
     background: #fff;
-    margin-top: 20px;
-    padding: 15px;
-    border-radius: 8px;
+    margin-top: 15px;
+    padding: 10px 15px;
+    border-radius: 6px;
     box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    font-size: 16px;
   }
   .answer-field {
-    margin-top: 10px;
+    margin-top: 8px;
+    font-size: 14px;
   }
-  #fullscreenAnswer {
-    position: fixed;
-    top: 0; left: 0;
-    width: 100%; height: 100%;
-    display: none;
-    justify-content: center;
-    align-items: center;
-    font-size: 5em;
+  #result {
+    margin-top: 8px;
     font-weight: bold;
-    color: white;
-    z-index: 9999;
   }
-  #fullscreenAnswer.correct { background: rgba(0,180,0,0.9); }
-  #fullscreenAnswer.wrong { background: rgba(220,0,0,0.9); }
+  #score {
+    position: fixed;
+    top: 10px;
+    right: 15px;
+    font-size: 14px;
+    color: #333;
+  }
 </style>
 </head>
 <body>
   <h1>方程式トレーニング</h1>
   <div>
-    <label>問題の難しさ(標準:10): <input type="number" id="diff" value="10"></label>
-    <label>答えの難しさ(標準:10): <input type="number" id="a_diff" value="10"></label>
+    <label>問題の難しさ: <input type="number" id="diff" value="1000"></label>
+    <label>答えの難しさ: <input type="number" id="a_diff" value="1000"></label>
     <button onclick="nextQuestion()">スタート</button>
   </div>
 
+  <div id="score">正解数: 0 / 0</div>
   <div id="quizArea"></div>
-  <div id="fullscreenAnswer"></div>
 
 <script>
 let currentAnswer = null;
+let correctCount = 0;
+let totalCount = 0;
+let currentEquation = "";
+let transitionStep = "";
+let answered = false; // 同じ問題で二重カウント防止
 
 function randint(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
-// マイナスを長いダッシュに置換する関数
-function prettyMinus(num) {
-  let s = num.toString();
-  return s.replace(/-/g, "−"); // Unicodeマイナス記号
+function simplifyCoeff(n) {
+  if (n === 0) return ""; // 0xは消す
+  if (n === 1) return "x";
+  if (n === -1) return "−x";
+  return n + "x";
 }
 
 function nextQuestion() {
+  answered = false;
   const diff = Number(document.getElementById("diff").value);
   const a_diff = Number(document.getElementById("a_diff").value);
   const quiz = document.getElementById("quizArea");
@@ -89,55 +103,61 @@ function nextQuestion() {
   const c = randint(-diff, diff);
   const d_val = (a - c) * x + b_raw;
 
-  const b = (b_raw >= 0 ? "+" + b_raw : prettyMinus(b_raw));
-  const d = (d_val >= 0 ? "+" + d_val : prettyMinus(d_val));
-  const equation = `${prettyMinus(a)}x${b}=${prettyMinus(c)}x${d}`;
+  const b = (b_raw >= 0 ? "+" + b_raw : "−" + Math.abs(b_raw));
+  const d = (d_val >= 0 ? "+" + d_val : "−" + Math.abs(d_val));
+  const aStr = simplifyCoeff(a);
+  const cStr = simplifyCoeff(c);
 
+  currentEquation = `${aStr}${b}=${cStr}${d}`;
   currentAnswer = x;
+
+  const rightSide = `${d_val}−(${b_raw})`;
+  transitionStep = `${a}x−${c}x=${rightSide}`.replace(/1x/g,"x").replace(/-1x/g,"-x");
 
   quiz.innerHTML = `
     <div class="question">
-      <div><b>問題:</b> ${equation}</div>
+      <div><b>問題:</b> ${currentEquation}</div>
       <div class="answer-field">
         あなたの答え (x = ): 
-        <input type="number" id="userAns">
+        <input type="number" id="userAns" onkeydown="if(event.key==='Enter'){checkAnswer();}">
         <button onclick="checkAnswer()">判定</button>
+        <button onclick="showTransition()">途中式</button>
       </div>
+      <div id="transition" style="margin-top:8px; display:none;"><b>途中式:</b> ${transitionStep}</div>
+      <div id="result"></div>
     </div>
   `;
-
-  const ansInput = document.getElementById("userAns");
-  ansInput.focus();
-
-  // Enterキーで判定
-  ansInput.addEventListener("keydown", function(e) {
-    if (e.key === "Enter") checkAnswer();
-  });
+  document.getElementById("userAns").focus();
 }
 
 function checkAnswer() {
+  if (answered) return; // 二重判定防止
+  answered = true;
+
   const userAns = Number(document.getElementById("userAns").value);
-  const overlay = document.getElementById("fullscreenAnswer");
+  const result = document.getElementById("result");
+  const correct = userAns === currentAnswer;
 
-  if (isNaN(userAns)) return;
-
-  let delay = 300; // ms
-  if (userAns === currentAnswer) {
-    overlay.textContent = "正解！";
-    overlay.className = "correct";
-    delay = 300;
+  totalCount++; // ✅ 判定の瞬間に加算
+  if (correct) {
+    result.textContent = "✅ 正解！";
+    result.style.color = "green";
+    correctCount++;
   } else {
-    overlay.textContent = `正解は x = ${currentAnswer}`;
-    overlay.className = "wrong";
-    delay = 600;
+    result.textContent = `❌ 不正解… 正しい答えは x = ${currentAnswer}`;
+    result.style.color = "red";
   }
+  updateScore();
+  setTimeout(nextQuestion, correct ? 300 : 600);
+}
 
-  overlay.style.display = "flex";
+function showTransition() {
+  const t = document.getElementById("transition");
+  t.style.display = t.style.display === "none" ? "block" : "none";
+}
 
-  setTimeout(() => {
-    overlay.style.display = "none";
-    nextQuestion();
-  }, delay);
+function updateScore() {
+  document.getElementById("score").textContent = `正解数: ${correctCount} / ${totalCount}`;
 }
 </script>
 </body>
